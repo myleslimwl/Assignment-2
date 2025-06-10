@@ -94,6 +94,96 @@ def find_start():
                 return r, c
     return 0, 0
 
+# Gets all valid neighbors of a tile in hex grid
+def get_neighbors(r, c):
+    even = (c % 2 == 0)
+    dirs = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+    dirs += [(-1 if even else 0, -1), (-1 if even else 0, 1)] if even else [(1, -1), (1, 1)]
+    neighbors = []
+    for dr, dc in dirs:
+        nr, nc = r + dr, c + dc
+        if 0 <= nr < ROWS and 0 <= nc < COLS and grid[nr][nc] != BLOCKED:
+            neighbors.append((nr, nc))
+    return neighbors
+
+# ------------------------ Pathfinding Algorithms ------------------------ #
+
+# Finds the best path to collect all treasures
+def find_best_treasure_path(start_pos, treasures, return_to_start=False):
+    if not treasures:
+        return []
+
+    best_path = []
+    min_total_cost = float('inf')
+
+    # Generate all possible orders of visiting treasures
+    for order in permutations(treasures):
+        current_pos = start_pos
+        total_path = []
+        total_cost = 0
+        valid = True
+
+        # Visit each treasure in current order
+        for target in order:
+            path_segment, cost = ucs(current_pos, target)
+            if not path_segment:
+                valid = False
+                break
+            total_path += path_segment
+            total_cost += cost
+            current_pos = target
+
+        # Optionally return to start after collecting all treasures
+        if valid and return_to_start:
+            return_path, return_cost = ucs(current_pos, start_pos)
+            if return_path:
+                total_path += return_path
+                total_cost += return_cost
+            else:
+                valid = False
+
+        # Update best path if current permutation is better
+        if valid and total_cost < min_total_cost:
+            min_total_cost = total_cost
+            best_path = total_path
+
+    return best_path
+
+# Uniform-Cost Search Algorithm
+def ucs(start, goal):
+    open_set = [(0, start)]  # (cost, position)
+    came_from = {}
+    cost_so_far = {start: 0}
+
+    while open_set:
+        current_cost, current = heapq.heappop(open_set)
+
+        if current == goal:
+            path = []
+            while current in came_from:
+                path.append(current)
+                current = came_from[current]
+            path.reverse()
+            return path, cost_so_far[goal]
+        
+        for neighbor in get_neighbors(*current):
+            tile = grid[neighbor[0]][neighbor[1]]
+            step_cost = 1.0  # Base cost
+
+            # Apply trap/reward modifiers
+            if tile in TRAPS:
+                step_cost *= 2
+            elif tile in REWARDS:
+                step_cost *= 0.5
+
+            new_cost = current_cost + step_cost
+            if neighbor not in cost_so_far or new_cost < cost_so_far[neighbor]:
+                cost_so_far[neighbor] = new_cost
+                came_from[neighbor] = current
+                heapq.heappush(open_set, (new_cost, neighbor))
+
+    return [], float('inf')
+
 # ------------------------ Drawing Functions ------------------------ #
 
 pygame.init()                             # Initialize pygame
@@ -159,17 +249,6 @@ def display_description(desc):
 
 # ------------------------ Game Logic ------------------------ #
 
-# Gets all valid neighbors of a tile in hex grid
-def get_neighbors(r, c):
-    even = (c % 2 == 0)
-    dirs = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-    dirs += [(-1 if even else 0, -1), (-1 if even else 0, 1)] if even else [(1, -1), (1, 1)]
-    neighbors = []
-    for dr, dc in dirs:
-        nr, nc = r + dr, c + dc
-        if 0 <= nr < ROWS and 0 <= nc < COLS and grid[nr][nc] != BLOCKED:
-            neighbors.append((nr, nc))
-    return neighbors
 '''
 # Heuristic for A* (Euclidean distance)
 def heuristic(a, b):
